@@ -1,0 +1,6 @@
+# https://caddyserver.com/docs/caddyfile/concepts
+
+:{$PROXY_PORT} {
+	reverse_proxy /* {$PROXY_TARGET}
+	encode zstd gzip
+}

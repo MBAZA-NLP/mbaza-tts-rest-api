@@ -1,0 +1,49 @@
+version: "3.3"
+services:
+
+  mbaza-tts-kin-cpu:
+    container_name: mbaza-tts-kin-cpu
+    restart: unless-stopped
+    env_file:
+      - .env
+    build:
+      context: ./
+      dockerfile: Dockerfile-kin-cpu
+      labels:
+        - mbaza-tts-kin-cpu
+    ports:
+      - "6903:6903"
+    environment:
+      - THREADS=2
+      - PROCESSES=1 # allow 2250 MB /x1 worker
+      - TIMEOUT=480 # worker timeout
+      - GRACEFUL_TIMEOUT=450 # worker timeout
+      - SRV_HOST=0.0.0.0
+      - SRV_PORT=6903
+      - APP_LANG=kin
+      - APP_SENTENCE_MAX_WORDS=40
+      - APP_SENTENCE_INFER_BATCH_SIZE=10 # allow around 550MB /x1 APP_SENTENCE_INFER_BATCH_SIZE
+      - APP_SAMPLE_TEXT=. indi nkuru wasoma ni uko muri suwede urukiko rwategetse gufunga burundu mbanenande kuko yahamwe n'ibyaha bya jenoside .
+      - APP_LOG_LEVEL=debug
+
+#  mbaza-tts-caddy:
+#    image: caddy:2-alpine
+#    container_name: mbaza-tts-caddy
+#    restart: unless-stopped
+#    env_file:
+#      - .env
+#    ports:
+#      - "5001:5001"
+#    environment:
+#      - PROXY_TARGET=mbaza-tts-kin-cpu:6903
+#    volumes:
+#      - $PWD/Caddyfile:/etc/caddy/Caddyfile
+#      - caddy_data:/data
+#      - caddy_config:/config
+#    depends_on:
+#      - mbaza-tts-kin-cpu
+#
+#volumes:
+#  caddy_data:
+#    external: true
+#  caddy_config:

@@ -1,0 +1,68 @@
+FROM tiangolo/uvicorn-gunicorn:python3.8
+
+RUN apt-get update
+RUN apt-get install -y libsndfile1
+RUN pip install --upgrade pip
+
+######################
+ENV CUDA_VERSION 11-0
+ENV CUDNN_VERSION 8.0.5.39-1+cuda11.0
+######################
+RUN DEBIAN_FRONTEND="noninteractive" apt-get install -y wget gnupg2 curl ca-certificates tzdata libpq-dev zip unzip
+
+#Install cuda drivers -- needed for GPU modeling
+RUN curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/7fa2af80.pub | apt-key add - && \
+    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/cuda.list && \
+    echo "deb https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/nvidia-ml.list
+
+RUN apt-get update && apt-get install -y --no-install-recommends cuda-cudart-$CUDA_VERSION cuda-compat-$CUDA_VERSION libcudnn8=$CUDNN_VERSION libcublas-$CUDA_VERSION libcufft-$CUDA_VERSION libcurand-$CUDA_VERSION libcusolver-$CUDA_VERSION libcusparse-$CUDA_VERSION && ln -s cuda-$CUDA_VERSION /usr/local/cuda
+
+# Required for nvidia-docker v1
+RUN echo "/usr/local/nvidia/lib" >> /etc/ld.so.conf.d/nvidia.conf \
+    && echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf
+
+ENV PATH /usr/local/nvidia/bin:/usr/local/cuda/bin:${PATH}
+ENV LD_LIBRARY_PATH /usr/local/nvidia/lib:/usr/local/nvidia/lib64
+
+# nvidia-container-runtime
+ENV NVIDIA_VISIBLE_DEVICES all
+ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
+ENV NVIDIA_REQUIRE_CUDA "cuda>=11.2 brand=tesla,driver>=418,driver<419 brand=tesla,driver>=440,driver<441 driver>=450,driver<451"
+######################
+
+ENV PYTHONPATH /code
+ENV PYTHONWRITEBYTECODE 1
+ENV PYTHONBUFFERED 1
+ENV APP_DEVICE cuda
+ENV APP_FASTPITCH_MODEL_FILE nvidia_fastpitch_210824.pt
+
+# Install the app
+WORKDIR /code/tts
+COPY . .
+RUN pip install -r requirements.txt
+
+# clone fastpitch
+WORKDIR /code
+RUN apt-get install -y git
+RUN git clone https://github.com/NVIDIA/DeepLearningExamples.git NVIDIADeepLearning
+WORKDIR /code/NVIDIADeepLearning
+RUN git checkout -b tts a43ffd01cb002b23a98c97c3c5a231e24a57fa71
+
+# install fastpitch requirements
+RUN pip install setuptools==59.5.0
+RUN pip install -r /code/NVIDIADeepLearning/PyTorch/SpeechSynthesis/FastPitch/requirements.txt
+
+# install fastpitch models
+WORKDIR /code/NVIDIADeepLearning/PyTorch/SpeechSynthesis/FastPitch
+RUN /code/tts/fastpitch/scripts/download_fastpitch.sh 1UtqaAsGVQA2iDI2GZSPEc5zK5pz7E7Wb nvidia_fastpitch_210824.pt
+RUN /code/tts/fastpitch/scripts/download_waveglow.sh
+RUN /code/tts/fastpitch/scripts/download_cmudict.sh
+
+# app bootstrap
+WORKDIR /code/tts
+ARG SRV_PORT
+ENV SRV_PORT "${SRV_PORT}"
+EXPOSE ${SRV_PORT}
+
+RUN chmod +x /code/tts/app/start.sh
+ENTRYPOINT ["/code/tts/app/start.sh"]
